@@ -47,6 +47,20 @@ variable "capacity_providers_fargate_spot" {
   default     = false
 }
 
+variable "iam_role_permissions_boundary" {
+  description = <<-EOT
+    ARN of the policy to attach as a permissions boundary on the EC2 instance
+    IAM role this module creates.
+
+    InTune addition. Our apply-after-merge CI role may only create IAM roles
+    that pin `tg-ci-boundary`; without a way to set it, any cluster created
+    through CI fails with AccessDenied on iam:CreateRole and leaves the unit
+    half-applied. Defaults to null, which keeps upstream behaviour.
+  EOT
+  type        = string
+  default     = null
+}
+
 variable "capacity_providers_ec2" {
   description = "EC2 autoscale groups capacity providers"
   type = map(object({
@@ -66,8 +80,18 @@ variable "capacity_providers_ec2" {
     maximum_scaling_step_size            = optional(number, 1)
     minimum_scaling_step_size            = optional(number, 1)
     target_capacity_utilization          = optional(number, 100)
-    ebs_optimized                        = optional(bool, false)
-    associate_public_ip_address          = optional(bool, false)
+    # InTune addition. Upstream hardcodes managed_scaling.status = "ENABLED"
+    # (ec2.tf), which makes an idle capacity provider provision instances it has
+    # nothing to run: with no instances and no tasks ECS reports
+    # CapacityProviderReservation = 100, above any target, so it scales out.
+    # A provider that ships before its workload does needs to be able to sit at
+    # zero. Default stays "ENABLED" so existing callers are unaffected.
+    managed_scaling_status = optional(string, "ENABLED")
+    # Must follow managed_scaling_status: ECS rejects managed termination
+    # protection on a provider whose managed scaling is disabled.
+    managed_termination_protection = optional(string, "ENABLED")
+    ebs_optimized                  = optional(bool, false)
+    associate_public_ip_address    = optional(bool, false)
     block_device_mappings = optional(list(object({
       device_name  = string
       no_device    = bool

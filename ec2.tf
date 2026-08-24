@@ -52,7 +52,11 @@ module "autoscale_group" {
   ## ECS autoscaling group does not have ELB integration, so we use EC2 health check type
   health_check_type = "EC2"
   # The Auto Scaling group must have instance protection from scale in enabled to use managed termination protection for a capacity provider,
-  protect_from_scale_in = true
+  # Follows managed termination protection: ECS needs protected instances to
+  # hold tasks it has not drained, but an ASG whose instances are all
+  # protected cannot scale in at all — desired_capacity 0 leaves the hosts
+  # running. Upstream hardcoded true.
+  protect_from_scale_in = each.value["managed_termination_protection"] == "ENABLED"
   # Disable autoscaling rules because scaling would be managed by ECS
   autoscaling_policies_enabled = false
   default_alarms_enabled       = false
@@ -109,13 +113,13 @@ resource "aws_ecs_capacity_provider" "ec2" {
 
   auto_scaling_group_provider {
     auto_scaling_group_arn         = module.autoscale_group[each.key].autoscaling_group_arn
-    managed_termination_protection = "ENABLED"
+    managed_termination_protection = each.value["managed_termination_protection"]
 
     managed_scaling {
       instance_warmup_period    = each.value["instance_warmup_period"]
       maximum_scaling_step_size = each.value["maximum_scaling_step_size"]
       minimum_scaling_step_size = each.value["minimum_scaling_step_size"]
-      status                    = "ENABLED"
+      status                    = each.value["managed_scaling_status"]
       target_capacity           = each.value["target_capacity_utilization"]
     }
   }

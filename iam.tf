@@ -30,6 +30,9 @@ resource "aws_iam_role" "default" {
   name = module.this.id
   path = "/"
 
+  # InTune addition — see variable description.
+  permissions_boundary = var.iam_role_permissions_boundary
+
   assume_role_policy = join("", data.aws_iam_policy_document.assume[*].json)
 }
 
